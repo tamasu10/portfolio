@@ -1,0 +1,18 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      docker: 18
+    commands:
+  pre_build:
+    commands:
+      - cd dev
+      - terraform init
+  build:
+    commands:
+      - terraform $TF_CMD $TF_OPT
+
+  post_build:
+    commands:
+      - echo terraform $TF_CMD completed on `date`
