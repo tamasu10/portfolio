@@ -1,0 +1,196 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: ecr
+
+Parameters:
+  ProjectCategoryName:
+    Default: sampleCategory
+    Type: String
+
+  VpcId:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+
+  TargetEnvNameSuffix:
+    Type: String
+
+  ALBSubnetIdList:
+    Description: "ALB Subnet ID list"
+    Type: List<AWS::EC2::Subnet::Id>
+
+  ALBName:
+    Type: String
+    Default: ""
+
+  IAMName:
+    Type: String
+    Default: "xxx"
+
+  TargetGroupName:
+    Type: String
+    Default: "default-tg"
+    Description: Environment Name
+
+  GitHubRepoName:
+    Type: String
+    Description: "GitHubRepoName"
+    Default: "xxx"
+
+  GitHubUserName:
+    Type: String
+    Description: "GitHubUserName"
+    Default: "xxx"
+
+  ECRName:
+    Type: String
+    Description: "ECRName"
+    Default: "xxx"
+
+Resources:
+  ecr:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ECRName
+      ImageScanningConfiguration:
+        scanOnPush: "true"
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Delete more than 30 images",
+                  "selection": {
+                    "tagStatus": "any",
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 30
+                  },
+                  "action": {
+                    "type": "expire"
+                  }
+                }
+              ]
+            }
+
+  IamRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      MaxSessionDuration: 43200
+      RoleName: !Sub "github-actions-assume-role-${IAMName}"
+      AssumeRolePolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+                },
+                "StringLike": {
+                  "token.actions.githubusercontent.com:sub": "repo:${GitHubUserName}/${GitHubRepoName}:*"
+                }
+              }
+            }
+          ]
+        }
+
+  ExtensionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Sub "github-actions-policy-${IAMName}"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "ecr:GetAuthorizationToken"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "ecr:BatchCheckLayerAvailability"
+              - "ecr:InitiateLayerUpload"
+              - "ecr:UploadLayerPart"
+              - "ecr:CompleteLayerUpload"
+              - "ecr:PutImage"
+            Resource:
+              - !Sub "arn:aws:ecr:ap-northeast-1:${AWS::AccountId}:repository/${ECRName}"
+      Roles:
+        - !Ref IamRole
+
+  ALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Name: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}${ALBName}"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}${ALBName}"
+        - Key: StackName
+          Value: !Ref AWS::StackName
+      #Scheme: "internet-facing"
+      Scheme: "internal"
+      LoadBalancerAttributes:
+        - Key: "deletion_protection.enabled"
+          Value: false
+        - Key: "idle_timeout.timeout_seconds"
+          Value: 60
+      SecurityGroups:
+        - {
+            "Fn::ImportValue": !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-ContainerALBSG-ID",
+          }
+      Subnets: !Ref ALBSubnetIdList
+
+  ALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      VpcId: !Ref VpcId
+      Name: !Sub ${TargetGroupName}
+      Protocol: HTTP
+      Port: 80
+      TargetType: ip
+
+Outputs:
+  ecr:
+    Value: !Ref ecr
+    Export:
+      Name: !Sub ECR-Repository-Name-${ProjectCategoryName}${TargetEnvNameSuffix}
+  ecrArn:
+    Value: !GetAtt ecr.Arn
+    Export:
+      Name: !Sub ECR-Repository-ARN-${ProjectCategoryName}${TargetEnvNameSuffix}
+  RoleARN:
+    Description: "ARN of Created Role."
+    Value: !GetAtt IamRole.Arn
+    Export:
+      Name: !Sub "github-actions-assume-role-ARN-${ProjectCategoryName}${TargetEnvNameSuffix}"
+  ALBArn:
+    Description: ALB ARN
+    Value: !Ref ALB
+    Export:
+      Name: !Sub ALB-${ProjectCategoryName}${TargetEnvNameSuffix}-ARN
+  ALBListenerArn:
+    Description: Internet ALB Listener ARN
+    Value: !Ref ALBListener
+    Export:
+      Name: !Sub ALB-${ProjectCategoryName}${TargetEnvNameSuffix}-Listener-ARN
+  ALBEndpoint:
+    Description: ALB endpoint for service
+    Value: !GetAtt "ALB.DNSName"
+  TargetGroupArn:
+    Description: Target Group ARN
+    Value: !Ref TargetGroup
+    Export:
+      Name: !Sub TargetGroup-${ProjectCategoryName}${TargetEnvNameSuffix}-ARN

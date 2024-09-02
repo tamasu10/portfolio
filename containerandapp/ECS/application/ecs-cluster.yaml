@@ -1,0 +1,396 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Fargate resource.
+
+Parameters:
+  ProjectCategoryName:
+    Default: sampleCategory
+    Type: String
+
+  VpcId:
+    Description: "VPC ID"
+    Type: AWS::EC2::VPC::Id
+
+  VpcName:
+    Type: String
+
+  TargetEnvNameSuffix:
+    Type: String
+
+  HostHeader:
+    Type: CommaDelimitedList
+    Description: "Host header for ALB listener rule to forward."
+
+  ECSSubnetIdList:
+    Description: "Subnet ID list"
+    Type: List<AWS::EC2::Subnet::Id>
+
+  TargetGroupName:
+    Type: String
+    Default: "tg"
+
+  ECSClusterName:
+    Type: String
+    Default: "cluster"
+
+  ECSTaskName:
+    Type: String
+    Default: "task"
+
+  ECSTaskCPUUnit:
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+    Type: String
+    Default: 512
+
+  ECSTaskMemory:
+    AllowedValues: [256, 512, 1024, 2048, 4096]
+    Type: String
+    Default: 1024
+
+  ECSContainerName:
+    Type: String
+    Default: "container"
+
+  ECSImageName:
+    Type: String
+
+  ECSServiceName:
+    Type: String
+    Default: "service"
+
+  ECSTaskDesiredCount:
+    Type: Number
+    Default: 1
+
+  ECSContainerPort:
+    Type: Number
+
+  ECSHealthCheckPath:
+    Type: String
+    Default: "/"
+
+  ServiceScaleEvaluationPeriods:
+    Description: The number of periods over which data is compared to the specified threshold
+    Type: Number
+    Default: 2
+    MinValue: 2
+
+  ServiceCpuScaleOutThreshold:
+    Type: Number
+    Description: Average CPU value to trigger auto scaling out
+    Default: 50
+    MinValue: 0
+    MaxValue: 100
+    ConstraintDescription: Value must be between 0 and 100
+
+  ServiceCpuScaleInThreshold:
+    Type: Number
+    Description: Average CPU value to trigger auto scaling in
+    Default: 25
+    MinValue: 0
+    MaxValue: 100
+    ConstraintDescription: Value must be between 0 and 100
+
+  TaskMinContainerCount:
+    Type: Number
+    Description: Minimum number of containers to run for the service
+    Default: 1
+    MinValue: 1
+    ConstraintDescription: Value must be at least one
+
+  TaskMaxContainerCount:
+    Type: Number
+    Description: Maximum number of containers to run for the service when auto scaling out
+    Default: 2
+    MinValue: 1
+    ConstraintDescription: Value must be at least one
+
+  SecretArn:
+    Type: String
+    Default: "*"
+
+Resources:
+  ListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      Conditions:
+        - Field: host-header
+          Values: !Ref HostHeader
+      ListenerArn:
+        {
+          "Fn::ImportValue": !Sub "ALB-${ProjectCategoryName}${TargetEnvNameSuffix}-Listener-ARN",
+        }
+      Priority: 30
+
+  TargetGroup:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      VpcId: !Ref VpcId
+      Name: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${TargetGroupName}" #Named by CF.
+      Protocol: HTTP
+      Port: !Ref ECSContainerPort
+      TargetType: ip
+      HealthCheckPort: !Ref ECSContainerPort
+      HealthCheckPath: !Ref ECSHealthCheckPath
+
+  ECSCluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSClusterName}"
+
+  ECSLogGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Sub "/ecs/logs/${ProjectCategoryName}${TargetEnvNameSuffix}-ecs-group"
+      RetentionInDays: 731
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-ECSTaskExecutionRolePolicy"
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ecs-tasks.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      MaxSessionDuration: 43200
+      RoleName: !Sub Role-for-EcsTask-${ProjectCategoryName}${TargetEnvNameSuffix}
+
+  ECSTaskExecutionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - "secretsmanager:GetResourcePolicy"
+              - "secretsmanager:GetSecretValue"
+              - "secretsmanager:DescribeSecret"
+              - "secretsmanager:ListSecretVersionIds"
+            Resource: !Ref SecretArn
+          - Effect: Allow
+            Action:
+              - "ssm:GetParameters"
+            Resource: !Join
+              - ""
+              - - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/"
+                - !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-*"
+      Roles:
+        - !Ref ECSTaskRole
+
+  ECSTaskDefinition:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      Cpu: !Ref ECSTaskCPUUnit
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      Family: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSTaskName}"
+      Memory: !Ref ECSTaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSContainerName}"
+          Image: !Ref ECSImageName
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref ECSLogGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: !Ref ProjectCategoryName
+          MemoryReservation: !Ref ECSTaskMemory
+          HealthCheck:
+            Command: ["CMD-SHELL", "/cnb/process/health-check"]
+          PortMappings:
+            - HostPort: !Ref ECSContainerPort #When networkMode=awsvpc, the host ports and container ports in port mappings must match.
+              Protocol: tcp
+              ContainerPort: !Ref ECSContainerPort
+              Name: !Ref ProjectCategoryName
+          Environment:
+            - Name: THC_PATH
+              Value: "/actuator/health"
+            - Name: spring.datasource.username
+              Value: "{{resolve:secretsmanager:Kiralia/RDS:SecretString:username}}"
+            - Name: spring.datasource.password
+              Value: "{{resolve:secretsmanager:Kiralia/RDS:SecretString:password}}"
+            - Name: spring.datasource.url
+              Value: !Sub
+                - jdbc:postgresql://${RDSEndpoint}:5432/crossbird
+                - RDSEndpoint:
+                    {
+                      "Fn::ImportValue": !Sub "PostgreSQLCluster-EndpointURL-${ProjectCategoryName}${TargetEnvNameSuffix}",
+                    }
+      TaskRoleArn: !Ref ECSTaskRole
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref ECSCluster
+      DesiredCount: !Ref ECSTaskDesiredCount
+      LaunchType: FARGATE
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroup
+          ContainerPort: !Ref ECSContainerPort
+          ContainerName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSContainerName}"
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          #VPCで作成したSGを使用
+          SecurityGroups:
+            - {
+                "Fn::ImportValue": !Sub "${VpcName}${TargetEnvNameSuffix}-ContainerSG-ID",
+              }
+          Subnets: !Ref ECSSubnetIdList
+      ServiceName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}"
+      TaskDefinition: !Ref ECSTaskDefinition
+
+  #  Auto Scaling Service
+  ServiceAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSContainerName}-autoscaling"
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:*
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutMetricAlarm
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                Resource: "*"
+
+  ServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: !Ref TaskMinContainerCount
+      MaxCapacity: !Ref TaskMaxContainerCount
+      ResourceId: !Sub
+        - service/${EcsClusterName}/${EcsDefaultServiceName}
+        - EcsClusterName: !Ref ECSCluster
+          EcsDefaultServiceName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}"
+      RoleARN: !GetAtt ServiceAutoScalingRole.Arn
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+    DependsOn:
+      - ECSService
+      - ServiceAutoScalingRole
+
+  ServiceScaleOutPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}-ScaleOutPolicy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - ScalingAdjustment: 1
+            MetricIntervalLowerBound: 0
+    DependsOn: ServiceScalingTarget
+
+  ServiceScaleInPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}-ScaleInPolicy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ServiceScalingTarget
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ChangeInCapacity
+        Cooldown: 60
+        MetricAggregationType: Average
+        StepAdjustments:
+          - ScalingAdjustment: -1
+            MetricIntervalUpperBound: 0
+    DependsOn: ServiceScalingTarget
+
+  ServiceScaleOutAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}-ScaleOutAlarm"
+      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
+      Statistic: Average
+      TreatMissingData: notBreaching
+      Threshold: !Ref ServiceCpuScaleOutThreshold
+      AlarmDescription: Alarm to add capacity if CPU is high
+      Period: 60
+      AlarmActions:
+        - !Ref ServiceScaleOutPolicy
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}"
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+    DependsOn:
+      - ECSService
+      - ServiceScaleOutPolicy
+
+  ServiceScaleInAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}-ScaleInAlarm"
+      EvaluationPeriods: !Ref ServiceScaleEvaluationPeriods
+      Statistic: Average
+      TreatMissingData: notBreaching
+      Threshold: !Ref ServiceCpuScaleInThreshold
+      AlarmDescription: Alarm to reduce capacity if container CPU is low
+      Period: 300
+      AlarmActions:
+        - !Ref ServiceScaleInPolicy
+      Namespace: AWS/ECS
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+        - Name: ServiceName
+          Value: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-${ECSServiceName}"
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
+    DependsOn:
+      - ECSService
+      - ServiceScaleInPolicy
+
+Outputs:
+  ClusterName:
+    Value: !Ref ECSCluster
+    Export:
+      Name: !Sub ECSCluster-Name-${ProjectCategoryName}${TargetEnvNameSuffix}
+  ECSServiceName:
+    Value: !GetAtt ECSService.Name
+    Export:
+      Name: !Sub ECSService-Name-${ProjectCategoryName}${TargetEnvNameSuffix}

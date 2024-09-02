@@ -1,0 +1,1121 @@
+AWSTemplateFormatVersion: '2010-09-09'
+#Stack Name: VPC-Subnets-RouteTable-NACL
+
+Description: Create AWS CloudFormation Customize Virtual Private Cloud
+
+Parameters:
+    VpcName:
+        Description: Please input VPC name.
+        Type: String
+        Default: VpcName
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    VpcCidrBlock:
+        Type: String
+        Description: Please input an IP range in VPC.
+        Default: 10.0.0.0/16
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/16"
+        ConstraintDescription: ''
+
+#Available AZ setting
+    AZ1:
+        Description: AZ name( a/b/c/d..).
+        Type: String
+        Default: a
+        AllowedPattern: '[abcd]'
+    AZ2:
+        Description: AZ name( a/b/c/d..).
+        Type: String
+        Default: b
+        AllowedPattern: '[abcd]'
+    AZ3:
+        Description: AZ name( a/b/c/d..).
+        Type: String
+        Default: c
+        AllowedPattern: '[abcd]'
+
+
+#DMZ Subnet(enable to access directly FROM internet)
+    VpcSubnetNameDMZ1:
+        Description: Please input the subnet name of VpcName-DMZ-subnet.
+        Type: String
+        Default: DMZ-subnet-1
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockDMZ1:
+        Type: String
+        Description: Please input an IP range in DMZ-subnet-1 at AZ1 .
+        Default: 10.0.0.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockDMZ2:
+        Type: String
+        Description: Please input an IP range in DMZ-subnet-1 at AZ2.
+        Default: 10.0.1.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockDMZ3:
+        Type: String
+        Description: Please input an IP range in DMZ-subnet-1 at AZ3.
+        Default: 10.0.2.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+
+#Public Subnet(enable to access directly TO internet)
+    VpcSubnetNamePublic1:
+        Description: Please input the subnet name of VpcName-public-subnet.
+        Type: String
+        Default: public-subnet-1
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockPublic1:
+        Type: String
+        Description: Please input an IP range in public-subnet-1 at AZ1.
+        Default: 10.0.10.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockPublic2:
+        Type: String
+        Description: Please input an IP range in public-subnet-1 at AZ2.
+        Default: 10.0.11.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockPublic3:
+        Type: String
+        Description: Please input an IP range in public-subnet-1 at AZ3.
+        Default: 10.0.12.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+
+#Protected Subnet(enable to access to internet with NAT Gateway)
+    VpcSubnetNameProtected1:
+        Description: Please input the subnet name of VpcName-protected-subnet.
+        Type: String
+        Default: protected-subnet-1
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockProtected1:
+        Type: String
+        Description: Please input an IP range in protected-subnet-1 at AZ1.
+        Default: 10.0.20.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockProtected2:
+        Type: String
+        Description: Please input an IP range in protected-subnet-1 at AZ2.
+        Default: 10.0.21.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockProtected3:
+        Type: String
+        Description: Please input an IP range in protected-subnet-1 at AZ3.
+        Default: 10.0.22.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+
+#Private Subnet(enable to access to internet with NAT Gateway)
+    VpcSubnetNamePrivate1:
+        Description: Please input the subnet name of VpcName-private-subnet-1.
+        Type: String
+        Default: private-subnet-1
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockPrivate1:
+        Type: String
+        Description: Please input an IP range in private-subnet-1 at AZ1.
+        Default: 10.0.30.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockPrivate2:
+        Type: String
+        Description: Please input an IP range in private-subnet-1 at AZ2.
+        Default: 10.0.31.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+    VpcSubnetCidrBlockPrivate3:
+        Type: String
+        Description: Please input an IP range in private-subnet-1 at AZ3.
+        Default: 10.0.32.0/24
+        AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/24"
+        ConstraintDescription: ''
+
+#Gateway
+    InternetGatewayName:
+        Description: Please input the name of Internet Gateway. e.g. igw is VpcName-igw.
+        Type: String
+        Default: igw
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    NatGatewayName1:
+        Description: Please input the name of Nat Gateway. e.g. ngw is VpcName-igw
+        Type: String
+        Default: ngw
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    NatGatewayName2:
+        Description: Please input the name of Nat Gateway. e.g. ngw is VpcName-igw
+        Type: String
+        Default: ngw
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+    NatGatewayName3:
+        Description: Please input the name of Nat Gateway. e.g. ngw is VpcName-igw
+        Type: String
+        Default: ngw
+        AllowedPattern: '[-a-zA-Z0-9]*'
+        ConstraintDescription: ''
+
+#VPC Peering
+    DevOpsVpcCidr:
+        Type: String
+        Description: "Everforth-DEVOPS VPC CIDR"
+        Default: 10.251.0.0/16
+    VpcPeeringConnectionId:
+        Type: String
+        Default: ""
+    
+
+
+Conditions:
+  isVpcPeer: !Not [!Equals [ !Ref VpcPeeringConnectionId, "" ]]
+
+Mappings: {}
+Resources:
+    VPC:
+        Type: 'AWS::EC2::VPC'
+        Properties:
+            CidrBlock:
+                Ref: VpcCidrBlock
+            EnableDnsSupport: 'true'
+            EnableDnsHostnames: 'true'
+            Tags:
+                - 
+                    Key: Name
+                    Value:
+                        Ref: VpcName
+
+    SubnetDMZ1:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ1}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockDMZ1
+            MapPublicIpOnLaunch: true
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNameDMZ1}${AZ1}"
+
+    SubnetDMZ2:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ2}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockDMZ2
+            MapPublicIpOnLaunch: true
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNameDMZ1}${AZ2}"
+
+    SubnetDMZ3:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ3}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockDMZ3
+            MapPublicIpOnLaunch: true
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNameDMZ1}${AZ3}"
+
+    SubnetPublic1:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ1}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockPublic1
+            MapPublicIpOnLaunch: true
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNamePublic1}${AZ1}"
+
+    SubnetPublic2:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ2}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockPublic2
+            MapPublicIpOnLaunch: true
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNamePublic1}${AZ2}"
+
+    SubnetPublic3:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ3}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockPublic3
+            MapPublicIpOnLaunch: true
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNamePublic1}${AZ3}"
+
+
+    SubnetProtected1:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ1}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockProtected1
+            MapPublicIpOnLaunch: false
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNameProtected1}${AZ1}"
+
+    SubnetProtected2:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ2}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockProtected2
+            MapPublicIpOnLaunch: false
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNameProtected1}${AZ2}"
+
+    SubnetProtected3:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ3}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockProtected3
+            MapPublicIpOnLaunch: false
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNameProtected1}${AZ3}"
+
+
+    SubnetPrivate1:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ1}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockPrivate1
+            MapPublicIpOnLaunch: false
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNamePrivate1}${AZ1}"
+
+    SubnetPrivate2:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ2}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockPrivate2
+            MapPublicIpOnLaunch: false
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNamePrivate1}${AZ2}"
+
+    SubnetPrivate3:
+        Type: 'AWS::EC2::Subnet'
+        Properties:
+            VpcId:
+                Ref: VPC
+            AvailabilityZone: !Sub ${AWS::Region}${AZ3}
+            CidrBlock:
+                Ref: VpcSubnetCidrBlockPrivate3
+            MapPublicIpOnLaunch: false
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${VpcSubnetNamePrivate1}${AZ3}"
+
+
+#Internet Gateway
+    InternetGateway:
+        Type: 'AWS::EC2::InternetGateway'
+        Properties:
+            Tags:
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-${InternetGatewayName}"
+                        
+    GatewayToInternet:
+        Type: 'AWS::EC2::VPCGatewayAttachment'
+        Properties:
+            VpcId:
+                Ref: VPC
+            InternetGatewayId:
+                Ref: InternetGateway
+
+
+#Nat Gateway
+
+    EIPforNatGateway1:
+        Type: AWS::EC2::EIP
+        Properties:
+            Domain: vpc
+    NatGateway1: 
+        Type: AWS::EC2::NatGateway
+        Properties: 
+            AllocationId: !GetAtt EIPforNatGateway1.AllocationId
+            SubnetId: !Ref SubnetPublic1
+            Tags: 
+                    - 
+                        Key: Name
+                        Value: !Sub "${VpcName}-${NatGatewayName1}"
+    EIPforNatGateway2:
+        Type: AWS::EC2::EIP
+        Properties:
+            Domain: vpc
+    NatGateway2: 
+        Type: AWS::EC2::NatGateway
+        Properties: 
+            AllocationId: !GetAtt EIPforNatGateway2.AllocationId
+            SubnetId: !Ref SubnetPublic2
+            Tags: 
+                    - 
+                        Key: Name
+                        Value: !Sub "${VpcName}-${NatGatewayName2}"
+    EIPforNatGateway3:
+        Type: AWS::EC2::EIP
+        Properties:
+            Domain: vpc
+    NatGateway3: 
+        Type: AWS::EC2::NatGateway
+        Properties: 
+            AllocationId: !GetAtt EIPforNatGateway3.AllocationId
+            SubnetId: !Ref SubnetPublic3
+            Tags: 
+                    - 
+                        Key: Name
+                        Value: !Sub "${VpcName}-${NatGatewayName3}"
+
+#DMZ Route Table
+    DMZRouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags:
+                - 
+                    Key: Application
+                    Value:
+                        Ref: 'AWS::StackId'
+                - 
+                    Key: Network
+                    Value: DMZ
+
+                - 
+                    Key: Name
+                    Value:  !Sub "${VpcName}-DMZRouteTable"
+    DMZRoute:
+        Type: 'AWS::EC2::Route'
+        DependsOn: GatewayToInternet
+        Properties:
+            RouteTableId:
+                Ref: DMZRouteTable
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId:
+                Ref: InternetGateway
+    DMZSubnetRouteTableAssociation1:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetDMZ1
+            RouteTableId:
+                Ref: DMZRouteTable
+    DMZSubnetRouteTableAssociation2:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetDMZ2
+            RouteTableId:
+                Ref: DMZRouteTable
+    DMZSubnetRouteTableAssociation3:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetDMZ3
+            RouteTableId:
+                Ref: DMZRouteTable
+
+#DMZ Network ACL
+    DMZNetworkAcl:
+        Type: 'AWS::EC2::NetworkAcl'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags: 
+                    - 
+                        Key: Name
+                        Value: !Sub "${VpcName}-DMZNetworkAcl"
+    DMZNetworkAclEntryIngress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: 'false'
+            NetworkAclId:
+                Ref: DMZNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+    DMZNetworkAclEntryEgress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: 'true'
+            NetworkAclId:
+                Ref: DMZNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+
+    DMZSubnetNetworkAclAssociation1:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetDMZ1
+            NetworkAclId:
+                Ref: DMZNetworkAcl
+    DMZSubnetNetworkAclAssociation2:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetDMZ2
+            NetworkAclId:
+                Ref: DMZNetworkAcl
+    DMZSubnetNetworkAclAssociation3:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetDMZ3
+            NetworkAclId:
+                Ref: DMZNetworkAcl
+
+
+#Public Route Table
+    PublicRouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags:
+                - 
+                    Key: Application
+                    Value:
+                        Ref: 'AWS::StackId'
+                - 
+                    Key: Network
+                    Value: Public
+
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-PublicRouteTable"
+    PublicRoute:
+        Type: 'AWS::EC2::Route'
+        DependsOn: GatewayToInternet
+        Properties:
+            RouteTableId:
+                Ref: PublicRouteTable
+            DestinationCidrBlock: 0.0.0.0/0
+            GatewayId:
+                Ref: InternetGateway
+    PublicSubnetRouteTableAssociation1:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPublic1
+            RouteTableId:
+                Ref: PublicRouteTable
+    PublicSubnetRouteTableAssociation2:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPublic2
+            RouteTableId:
+                Ref: PublicRouteTable
+    PublicSubnetRouteTableAssociation3:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPublic3
+            RouteTableId:
+                Ref: PublicRouteTable
+
+#Public Network ACL
+    PublicNetworkAcl:
+        Type: 'AWS::EC2::NetworkAcl'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags: 
+                    - 
+                        Key: Name
+                        Value: !Sub "${VpcName}-PublicNetworkAcl"
+
+    PublicNetworkAclEntryIngress60:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: false
+            NetworkAclId:
+                Ref: PublicNetworkAcl
+            Icmp:
+                Code: -1
+                Type: -1
+            Protocol: '1'
+            RuleAction: allow
+            RuleNumber: 60
+
+    PublicNetworkAclEntryIngress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock:
+                Ref: VpcCidrBlock
+            Egress: 'false'
+            NetworkAclId:
+                Ref: PublicNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+
+
+    PublicNetworkAclEntryIngress110:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: false
+            NetworkAclId:
+                Ref: PublicNetworkAcl
+            PortRange:
+                From: 1024
+                To: 65535
+            Protocol: '6'
+            RuleAction: allow
+            RuleNumber: 110
+
+    # PublicNetworkAclEntryIngress200:
+    #     Type: 'AWS::EC2::NetworkAclEntry'
+    #     Properties:
+    #         CidrBlock: !Ref DevOpsVpcCidr
+    #         Egress: false
+    #         NetworkAclId:
+    #             Ref: PublicNetworkAcl
+    #         PortRange:
+    #             From: 9000 #node_exporter
+    #             To: 9000
+    #         Protocol: '6'
+    #         RuleAction: allow
+    #         RuleNumber: 200
+
+    PublicNetworkAclEntryEgress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: 'true'
+            NetworkAclId:
+                Ref: PublicNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+
+    PublicSubnetNetworkAclAssociation1:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPublic1
+            NetworkAclId:
+                Ref: PublicNetworkAcl
+    PublicSubnetNetworkAclAssociation2:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPublic2
+            NetworkAclId:
+                Ref: PublicNetworkAcl
+    PublicSubnetNetworkAclAssociation3:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPublic3
+            NetworkAclId:
+                Ref: PublicNetworkAcl
+
+#Protected Route Table
+    # a
+    ProtectedRouteTable1:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags:
+                - 
+                    Key: Application
+                    Value:
+                        Ref: 'AWS::StackId'
+                - 
+                    Key: Network
+                    Value: Protected
+
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-ProtectedRouteTable-a"
+    ProtectedRoute:
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: ProtectedRouteTable1
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId:
+                Ref: NatGateway1
+    ProtectedSubnetRouteTableAssociation1:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetProtected1
+            RouteTableId:
+                Ref: ProtectedRouteTable1
+    # c
+    ProtectedRouteTable2:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags:
+                - 
+                    Key: Application
+                    Value:
+                        Ref: 'AWS::StackId'
+                - 
+                    Key: Network
+                    Value: Protected
+
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-ProtectedRouteTable-c"
+    ProtectedRoute2:
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: ProtectedRouteTable2
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId:
+                Ref: NatGateway2
+    ProtectedSubnetRouteTableAssociation2:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetProtected2
+            RouteTableId:
+                Ref: ProtectedRouteTable2
+    # d
+    ProtectedRouteTable3:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags:
+                - 
+                    Key: Application
+                    Value:
+                        Ref: 'AWS::StackId'
+                - 
+                    Key: Network
+                    Value: Protected
+
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-ProtectedRouteTable-d"
+    ProtectedRoute3:
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: ProtectedRouteTable3
+            DestinationCidrBlock: 0.0.0.0/0
+            NatGatewayId:
+                Ref: NatGateway3
+    ProtectedSubnetRouteTableAssociation3:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetProtected3
+            RouteTableId:
+                Ref: ProtectedRouteTable3
+
+#Protected Network ACL
+    ProtectedNetworkAcl:
+        Type: 'AWS::EC2::NetworkAcl'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags: 
+                    - 
+                        Key: Name
+                        Value: !Sub "${VpcName}-ProtectedNetworkAcl"
+
+    ProtectedNetworkAclEntryIngress60:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: false
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+            Icmp:
+                Code: -1
+                Type: -1
+            Protocol: '1'
+            RuleAction: allow
+            RuleNumber: '60'
+
+    ProtectedNetworkAclEntryIngress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock:
+                Ref: VpcCidrBlock
+            Egress: 'false'
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+
+    ProtectedNetworkAclEntryIngress110:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: false
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+            PortRange:
+                From: 1024
+                To: 65535
+            Protocol: '6'
+            RuleAction: allow
+            RuleNumber: '110'
+
+#DevOpsVPC
+    ProtectedNetworkAclEntryIngress200:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: !Ref DevOpsVpcCidr
+            Egress: false
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+            PortRange:
+                From: 80 # Monitoring Server haccp
+                To: 80
+            Protocol: '6'
+            RuleAction: allow
+            RuleNumber: '200'
+    ProtectedNetworkAclEntryIngress210:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: !Ref DevOpsVpcCidr
+            Egress: false
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+            PortRange:
+                From: 22
+                To: 22
+            Protocol: '6'
+            RuleAction: allow
+            RuleNumber: '210'
+
+    ProtectedNetworkAclEntryEgress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock: "0.0.0.0/0"
+            Egress: 'true'
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+
+    ProtectedSubnetNetworkAclAssociation1:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetProtected1
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+    ProtectedSubnetNetworkAclAssociation2:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetProtected2
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+    ProtectedSubnetNetworkAclAssociation3:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetProtected3
+            NetworkAclId:
+                Ref: ProtectedNetworkAcl
+
+#Private Route Table
+    PrivateRouteTable:
+        Type: 'AWS::EC2::RouteTable'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags:
+                - 
+                    Key: Application
+                    Value:
+                        Ref: 'AWS::StackId'
+                - 
+                    Key: Network
+                    Value: Private
+
+                - 
+                    Key: Name
+                    Value: !Sub "${VpcName}-PrivateRouteTable"
+
+# Set route only VPC CIDR
+#    PrivateRoute:
+#        Type: 'AWS::EC2::Route'
+
+    PrivateSubnetRouteTableAssociation1:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPrivate1
+            RouteTableId:
+                Ref: PrivateRouteTable
+    PrivateSubnetRouteTableAssociation2:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPrivate2
+            RouteTableId:
+                Ref: PrivateRouteTable
+    PrivateSubnetRouteTableAssociation3:
+        Type: 'AWS::EC2::SubnetRouteTableAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPrivate3
+            RouteTableId:
+                Ref: PrivateRouteTable
+
+
+#Private Network ACL
+    PrivateNetworkAcl:
+        Type: 'AWS::EC2::NetworkAcl'
+        Properties:
+            VpcId:
+                Ref: VPC
+            Tags: 
+                    - 
+                        Key: Name
+                        Value: !Sub "${VpcName}-PrivateNetworkAcl"
+
+    PrivateNetworkAclEntryIngress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock:
+                Ref: VpcCidrBlock
+            Egress: 'false'
+            NetworkAclId:
+                Ref: PrivateNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+    PrivateNetworkAclEntryEgress100:
+        Type: 'AWS::EC2::NetworkAclEntry'
+        Properties:
+            CidrBlock:
+                Ref: VpcCidrBlock
+            Egress: 'true'
+            NetworkAclId:
+                Ref: PrivateNetworkAcl
+            Protocol: '-1'
+            RuleAction: allow
+            RuleNumber: '100'
+
+    PrivateSubnetNetworkAclAssociation1:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPrivate1
+            NetworkAclId:
+                Ref: PrivateNetworkAcl
+    PrivateSubnetNetworkAclAssociation2:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPrivate2
+            NetworkAclId:
+                Ref: PrivateNetworkAcl
+    PrivateSubnetNetworkAclAssociation3:
+        Type: 'AWS::EC2::SubnetNetworkAclAssociation'
+        Properties:
+            SubnetId:
+                Ref: SubnetPrivate3
+            NetworkAclId:
+                Ref: PrivateNetworkAcl
+
+#VPC Peering Route
+    VpcPeerRouteDMZ:
+        Condition: isVpcPeer
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: DMZRouteTable
+            DestinationCidrBlock: !Ref DevOpsVpcCidr
+            VpcPeeringConnectionId: !Ref VpcPeeringConnectionId
+    VpcPeerRoutePublic:
+        Condition: isVpcPeer
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: PublicRouteTable
+            DestinationCidrBlock: !Ref DevOpsVpcCidr
+            VpcPeeringConnectionId: !Ref VpcPeeringConnectionId
+    VpcPeerRouteProtected1:
+        Condition: isVpcPeer
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: ProtectedRouteTable1
+            DestinationCidrBlock: !Ref DevOpsVpcCidr
+            VpcPeeringConnectionId: !Ref VpcPeeringConnectionId
+    VpcPeerRouteProtected2:
+        Condition: isVpcPeer
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: ProtectedRouteTable2
+            DestinationCidrBlock: !Ref DevOpsVpcCidr
+            VpcPeeringConnectionId: !Ref VpcPeeringConnectionId
+    VpcPeerRouteProtected3:
+        Condition: isVpcPeer
+        Type: 'AWS::EC2::Route'
+        Properties:
+            RouteTableId:
+                Ref: ProtectedRouteTable3
+            DestinationCidrBlock: !Ref DevOpsVpcCidr
+            VpcPeeringConnectionId: !Ref VpcPeeringConnectionId
+    #Do NOT connect to Private Subnet to directly.
+
+
+Outputs:
+#VPC
+  VPCID:
+    Description: Resource ID.
+    Value: !Ref VPC 
+    Export:
+      Name: !Sub VPCID-${VpcName}
+  VPCCIDR:
+    Description: Vpc Cidr Block.
+    Value: !Ref VpcCidrBlock 
+    Export:
+      Name: !Sub VPCCIDR-${VpcName}
+
+#Subnet
+  SubnetDMZ1ID:
+    Description: Resource ID.
+    Value: !Ref SubnetDMZ1 
+    Export:
+      Name: !Sub SubnetDMZ1-${VpcName}
+  SubnetDMZ2ID:
+    Description: Resource ID.
+    Value: !Ref SubnetDMZ2
+    Export:
+      Name: !Sub SubnetDMZ2-${VpcName}
+  SubnetDMZ3ID:
+    Description: Resource ID.
+    Value: !Ref SubnetDMZ3 
+    Export:
+      Name: !Sub SubnetDMZ3-${VpcName}
+
+  SubnetPublic1ID:
+    Description: Resource ID.
+    Value: !Ref SubnetPublic1
+    Export:
+      Name: !Sub SubnetPublic1-${VpcName}
+  SubnetPublic2ID:
+    Description: Resource ID.
+    Value: !Ref SubnetPublic2
+    Export:
+      Name: !Sub SubnetPublic2-${VpcName}
+  SubnetPublic3ID:
+    Description: Resource ID.
+    Value: !Ref SubnetPublic3
+    Export:
+      Name: !Sub SubnetPublic3-${VpcName}
+
+  SubnetProtected1ID:
+    Description: Resource ID.
+    Value: !Ref SubnetProtected1
+    Export:
+      Name: !Sub SubnetProtected1-${VpcName}
+  SubnetProtected2ID:
+    Description: Resource ID.
+    Value: !Ref SubnetProtected2
+    Export:
+      Name: !Sub SubnetProtected2-${VpcName}
+  SubnetProtected3ID:
+    Description: Resource ID.
+    Value: !Ref SubnetProtected3
+    Export:
+      Name: !Sub SubnetProtected3-${VpcName}
+
+  SubnetPrivate1ID:
+    Description: Resource ID.
+    Value: !Ref SubnetPrivate1
+    Export:
+      Name: !Sub SubnetPrivate1-${VpcName}
+  SubnetPrivate2ID:
+    Description: Resource ID.
+    Value: !Ref SubnetPrivate2
+    Export:
+      Name: !Sub SubnetPrivate2-${VpcName}
+  SubnetPrivate3ID:
+    Description: Resource ID.
+    Value: !Ref SubnetPrivate3
+    Export:
+      Name: !Sub SubnetPrivate3-${VpcName}
+
+#Gateway
+  EIPforNatGateway1ddress:
+    Description: NAT EIP.
+    Value: !Ref EIPforNatGateway1
+    Export:
+      Name: !Sub EIPforNatGateway1-${VpcName}
