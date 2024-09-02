@@ -1,0 +1,236 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "HTTP API Sample"
+
+Parameters:
+  ProjectCategoryName:
+    Description: "ProjectCategoryName"
+    Type: String
+  TargetEnvNameSuffix:
+    Description: "TargetEnvNameSuffix"
+    Type: String
+  # ALBListenerArn:
+  #   Description : "ALB Listener Arn"
+  #   Type : String
+  SubnetIdList:
+    Description: "VPC Link Subnet ID list"
+    Type: List<AWS::EC2::Subnet::Id>
+  # SecurityGroupIdList:
+  #   Description : "VPC Link Security Group ID list"
+  #   Type : List<AWS::EC2::SecurityGroup::Id>
+  AcmArn:
+    Description: "AcmArn"
+    Type: String
+  CustomDomainName:
+    Description: "CustomDomainName"
+    Type: String
+  DomainHostZoneId:
+    Description: "DomainHostZoneId"
+    Type: String
+  EmailSendingAccount:
+    Type: String
+    AllowedValues:
+      - COGNITO_DEFAULT
+      - DEVELOPER
+    Description: Who sends mail, Cognito or SES ?
+
+Resources:
+  # APIGateway
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub "${ProjectCategoryName}-APIG"
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowHeaders:
+          - "*"
+        AllowMethods:
+          - "*"
+        AllowOrigins:
+          - "*"
+
+  HttpApiDefaultStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref HttpApi
+      StageName: "$default"
+      AutoDeploy: true
+      AccessLogSettings:
+        DestinationArn: !GetAtt AccessLogGroup.Arn
+        Format: '{"requestId":"$context.requestId", "ip":"$context.identity.sourceIp", "requestTime":"$context.requestTime", "httpMethod":"$context.httpMethod", "path":"$context.path", "protocol":"$context.protocol", "responseLength":"$context.responseLength"}'
+
+  HttpApiDefaultIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      ConnectionId: !Ref HttpVPCLink
+      ConnectionType: VPC_LINK
+      IntegrationType: HTTP_PROXY
+      IntegrationUri:
+        {
+          "Fn::ImportValue": !Sub "ALB-${ProjectCategoryName}${TargetEnvNameSuffix}-Listener-ARN",
+        }
+      IntegrationMethod: ANY
+      PayloadFormatVersion: "1.0"
+
+  HttpApiDefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: ANY /{proxy+}
+      AuthorizationType: JWT
+      AuthorizerId: !Ref CognitoAuthorizer
+      Target: !Sub "integrations/${HttpApiDefaultIntegration}"
+
+  HttpVPCLink:
+    Type: AWS::ApiGatewayV2::VpcLink
+    Properties:
+      Name: !Sub "${ProjectCategoryName}-VPCLink"
+      # SecurityGroupIds: !Ref SecurityGroupIdList
+      SubnetIds: !Ref SubnetIdList
+
+  ApiGatewayCustomDomainName:
+    Type: "AWS::ApiGatewayV2::DomainName"
+    Properties:
+      # CertificateArn: !Ref AcmArn
+      DomainName: !Ref CustomDomainName
+      DomainNameConfigurations:
+        - EndpointType: REGIONAL
+          CertificateArn: !Ref AcmArn
+
+  ApiMapping:
+    Type: "AWS::ApiGatewayV2::ApiMapping"
+    DependsOn: ApiGatewayCustomDomainName
+    Properties:
+      DomainName: !Ref CustomDomainName
+      ApiId: !Ref HttpApi
+      Stage: !Ref HttpApiDefaultStage
+
+  CustomDomainRecord:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      Name: !Ref CustomDomainName
+      Type: A
+      HostedZoneId: !Ref DomainHostZoneId
+      AliasTarget:
+        DNSName: !GetAtt ApiGatewayCustomDomainName.RegionalDomainName
+        HostedZoneId: !GetAtt ApiGatewayCustomDomainName.RegionalHostedZoneId
+
+  CognitoAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref HttpApi
+      AuthorizerType: JWT
+      IdentitySource:
+        - "$request.header.Authorization"
+      JwtConfiguration:
+        Audience:
+          - !Ref UserPoolClientBackend
+          - !Ref UserPoolClientFrontend
+        Issuer: !Sub
+          - https://cognito-idp.${AWS::Region}.amazonaws.com/${userPoolId}
+          - userPoolId: !Ref UserPool
+      Name: !Sub "${ProjectCategoryName}"
+
+  AccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "API-Gateway-Access-Logs_${ProjectCategoryName}"
+      RetentionInDays: 365
+
+  # Cognito
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "${ProjectCategoryName}${TargetEnvNameSuffix}-UserPool"
+
+      # パスワードを忘れた時はメールで.
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+      # ユーザー作成(サインアップ)はbackend経由のみ.
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+        InviteMessageTemplate:
+          EmailMessage: |
+            Your username is {username} and temporary password is {####}.
+          EmailSubject: signuptest
+
+      # パスワード変更時
+      VerificationMessageTemplate:
+        DefaultEmailOption: "CONFIRM_WITH_CODE"
+        # Todo: iPhone/AndroidのアプリURLが作成されたら更新
+        EmailMessage: |
+          Your verification code is {####}.
+        EmailSubject: passchangetest
+
+      # Eメールアドレスでもログイン可能.
+      AliasAttributes:
+        - email
+
+      # Eメールアドレスを検証.
+      AutoVerifiedAttributes:
+        - email
+
+      # Eメール設定.
+      EmailConfiguration:
+        EmailSendingAccount: !Ref EmailSendingAccount
+      #   # SourceArnはSESを使う場合のみ設定.
+      #   SourceArn:
+      #     Fn::If:
+      #       - UseSES
+      #       - !Ref EamilAddressArn
+      #       - !Ref AWS::NoValue
+      #   # FromはSESを使う場合のみ設定.
+      #   From:
+      #     Fn::If:
+      #       - UseSES
+      #       - !Ref From
+      #       - !Ref AWS::NoValue
+      # # MFAはなし.
+      MfaConfiguration: "OFF"
+
+      # パスワードポリシー.
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+
+      # 属性.
+      Schema:
+        - Name: email
+          Mutable: true
+          Required: true
+
+      # ユーザー名の大文字と小文字を区別.
+      UsernameConfiguration:
+        CaseSensitive: true
+
+  # クライアント(backend).
+  UserPoolClientBackend:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub CognitoUserPoolClientBackend-${ProjectCategoryName}${TargetEnvNameSuffix}
+      UserPoolId: !Ref UserPool
+
+      # サポートされている認証フロー.
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+
+  # クライアント(frontend).
+  UserPoolClientFrontend:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub CognitoUserPoolClientFrontend-${ProjectCategoryName}${TargetEnvNameSuffix}
+      UserPoolId: !Ref UserPool
+
+      # サポートされている認証フロー.
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
